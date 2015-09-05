@@ -52,6 +52,8 @@ import os
 import time
 import RPi.GPIO as GPIO
 import logging
+import subprocess
+import shutil
 from datetime import datetime
 
 # Grab the current datetime which will be used to generate dynamic folder names
@@ -65,7 +67,8 @@ initMins = "%02d" % (d.minute)
 # Define the location where you wish to save files. Set to HOME as default. 
 # If you run a local web server on Apache you could set this to /var/www/ to make them 
 # accessible via web browser.
-folderToSave = "/home/timelapse/timelapse_" + str(initYear) + str(initMonth) + str(initDate) + str(initHour) + str(initMins)
+remoteFolder = "timelapse/" + str(initYear) + str(initMonth) + str(initDate)
+folderToSave = "/home/pi/timelapse/" + str(initYear) + str(initMonth) + str(initDate) + str(initHour) + str(initMins)
 os.mkdir(folderToSave)
 
 # Set up a log file to store activities for any checks.
@@ -80,8 +83,17 @@ fileSerial = 1
 while True:
     
     d = datetime.now()
+
+    year = "%04d" % (d.year)
+    month = "%02d" % (d.month)
+    date = "%02d" % (d.day)
+    hour = "%02d" % (d.hour)
+    mins = "%02d" % (d.minute)
+
     if d.hour < 99:
-        
+	remoteFolder = "timelapse/" + str(year) + str(month) + str(date)        
+        remoteFolderLatest = "timelapse"
+
         # Set FileSerialNumber to 000X using four digits
         fileSerialNumber = "%04d" % (fileSerial)
         
@@ -90,13 +102,20 @@ while True:
         mins = "%02d" % (d.minute)
         
         # Define the size of the image you wish to capture. 
-        imgWidth = 800 # Max = 2592 
-        imgHeight = 600 # Max = 1944
+        imgWidth = 2560 # Max = 2592 
+        imgHeight = 1600 # Max = 1944
         print " ====================================== Saving file at " + hour + ":" + mins
+	
+	# Set file name
+	fileName = str(fileSerialNumber) + "_" + str(hour) + str(mins) + ".jpg"
+	filePath = str(folderToSave) + "/" + str(fileSerialNumber) + "_" + str(hour) + str(mins) + ".jpg"
         
         # Capture the image using raspistill. Set to capture with added sharpening, auto white balance and average metering mode
         # Change these settings where you see fit and to suit the conditions you are using the camera in
-        os.system("raspistill -w " + str(imgWidth) + " -h " + str(imgHeight) + " -o " + str(folderToSave) + "/" + str(fileSerialNumber) + "_" + str(hour) + str(mins) +  ".jpg  -sh 40 -awb auto -mm average -v")
+        os.system("raspistill -w " + str(imgWidth) + " -h " + str(imgHeight) + " -o " + "/home/pi/tmp.jpg" + " -sh 40 -awb auto -mm average -v")
+	
+	# Copy file to USB
+#	shutil.copy('/home/pi/tmp.jpg', filePath)	
 
 	# Write out to log file
 	logging.debug(' Image saved: ' + str(folderToSave) + "/" + str(fileSerialNumber) + "_" + str(hour) + str(mins) +  ".jpg")
@@ -104,8 +123,12 @@ while True:
         # Increment the fileSerial
         fileSerial += 1
         
+	# Upload to Dropbox
+	subprocess.call(['/home/pi/Dropbox-Uploader/dropbox_uploader.sh', 'upload', '/home/pi/tmp.jpg', str(remoteFolder) + "/" + str(fileName)])
+        subprocess.call(['/home/pi/Dropbox-Uploader/dropbox_uploader.sh', 'upload', '/home/pi/tmp.jpg', str(remoteFolderLatest) + "/latest.jpg"])
+        
         # Wait 60 seconds (1 minute) before next capture
-        time.sleep(60)
+        time.sleep(3600)
         
     else:
         
